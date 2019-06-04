@@ -281,7 +281,7 @@ void showStats() {
   }
 
 #ifdef TRACE
-  ss_printTrace(stealStack, num_workers);
+  //ss_printTrace(stealStack, num_workers);
 #endif
 }
 

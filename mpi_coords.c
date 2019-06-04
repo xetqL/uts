@@ -19,7 +19,7 @@ int main(int argc, char **argv)
 			//find coords of this rank
 			int x,y,z,a,b,c;
 			FJMPI_Topology_sys_rank2xyzabc(i,&x,&y,&z,&a,&b,&c);
-			fprintf(stdout,"%d: %d %d %d %d %d %d\n",i,x,y,z,a,b,c);
+			//fprintf(stdout,"%d: %d %d %d %d %d %d\n",i,x,y,z,a,b,c);
 		}
 	}
 	MPI_Barrier(MPI_COMM_WORLD);

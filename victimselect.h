@@ -147,6 +147,124 @@ inline int selectvictim(int rank, int size, int last)
 	return last;
 }
 
+#elif defined(__GUIDED_WS__)
+#include <mpi.h>
+int *victims;    // Size == worldsize
+double *victimsWir;
+int *victimsAge;
+
+inline char* allocate_gossip_memory(int comm_size, int *buff_size)
+{
+    *buff_size = comm_size * sizeof(double) + comm_size * sizeof(int);
+    //printf("Buffer of size: %d\n", *buff_size);
+    return (char*) malloc(*buff_size);
+}
+
+inline void vsinit(int rank, int comm_size)
+{
+    srand(rank);
+    int i,j;
+    // allocate & init the victim array
+    victims    = malloc((comm_size -1) * sizeof(int));
+    //weights = malloc((comm_size -1) * sizeof(double));
+    victimsWir = calloc((comm_size)    , sizeof(double));
+    victimsAge = malloc((comm_size)    * sizeof(int));
+
+    for(i = 0, j = 0; i < comm_size; i++){
+        if(i != rank) {
+            victims[j++] = i;
+        }
+        victimsAge[i] = -1;
+    }
+
+}
+
+inline char * vsdescript(void)
+{
+#if defined(__SS_HALF__)
+    return "MPI Workstealing (Half Gossip Selection Candidate)";
+#else
+    return "MPI Workstealing (Gossip Selection Candidate)";
+#endif
+}
+
+inline void gossip_merge_unpack(char* buffer, int comm_size)
+{
+    const int FSIZE = comm_size * sizeof(double) + comm_size * sizeof(int);
+    int i, position = 0;
+
+    //receiving buffer
+    double *new_victimsWir = malloc(comm_size * sizeof(double));
+    int    *new_victimsAge = malloc(comm_size * sizeof(int));
+
+    //unpack buffer
+    MPI_Unpack(buffer, FSIZE, &position, new_victimsWir, comm_size, MPI_DOUBLE, MPI_COMM_WORLD);
+    MPI_Unpack(buffer, FSIZE, &position, new_victimsAge, comm_size, MPI_INT,    MPI_COMM_WORLD);
+
+    //merge with existing data
+    for(i = 0; i < comm_size; ++i) {
+        if(new_victimsAge[i] < victimsAge[i]){ //then replace data
+            victimsWir[i] = new_victimsWir[i];
+            victimsAge[i] = new_victimsAge[i];
+        }
+    }
+
+    free(new_victimsWir);
+    free(new_victimsAge);
+}
+
+inline void gossip_pack(char* buffer, int comm_size)
+{
+    const int FSIZE = comm_size * sizeof(double) + comm_size * sizeof(int);
+    int i, position = 0;
+
+    //Pack buffer
+    MPI_Pack(victimsWir, comm_size, MPI_DOUBLE, buffer, FSIZE, &position, MPI_COMM_WORLD);
+    MPI_Pack(victimsAge, comm_size, MPI_INT,    buffer, FSIZE, &position, MPI_COMM_WORLD);
+
+    return;
+}
+
+inline int selectvictim(int rank, int size, int last)
+{
+
+    int A, B, C;
+    double Awir, Bwir, Cwir;
+    int i;
+
+    do {
+        A = rand() % size;
+    } while(A == rank);
+
+    do {
+        B = rand() % size;
+    } while(B == rank || B == A);
+
+    do {
+        C = rand() % size;
+    } while(C == rank || C == B || C == A);
+
+    //select randomly if age are the same
+    if(victimsAge[A] == -1 && victimsAge[B] == -1 && victimsAge[C] == -1) {
+        i = rand() % 3;
+        switch(i)
+        {
+            case 0: return A;
+            case 1: return B;
+            case 2: return C;
+        }
+    }
+
+    Awir = victimsWir[A];
+    Bwir = victimsWir[B];
+    Cwir = victimsWir[C];
+
+    if(Awir >= Bwir && Awir >= Cwir) return A;
+    if(Bwir >= Awir && Bwir >= Cwir) return B;
+    if(Cwir >= Awir && Cwir >= Bwir) return C;
+    return -1;
+}
+
 #else
 #error "You forgot to select a victim selection"
 #endif /* Strategy selection */

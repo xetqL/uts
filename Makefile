@@ -101,6 +101,9 @@ uts-mpi-ws-half: $(DM_SRCS) $(QUEUE_SRCS) mpi_wshalf.c $(RNG_SRC) $(COMMON_SRCS)
 uts-mpi-ws-half-rand: $(DM_SRCS) $(QUEUE_SRCS) mpi_wshalf.c $(RNG_SRC) $(COMMON_SRCS)
 	$(MPICC) $(MPICC_OPTS) $(MPILD_OPTS) $(RNG_DEF) $(FLAGS) -DTRACE -D__VS_RAND__ -D__SS_HALF__ -D__MPI__ -o $@ $+
 
+uts-mpi-guidedws-half-rand: $(DM_SRCS) $(QUEUE_SRCS) mpi_wshalf.c $(RNG_SRC) $(COMMON_SRCS)
+	$(MPICC) $(MPICC_OPTS) $(MPILD_OPTS) $(RNG_DEF) $(FLAGS) -DTRACE -D__GUIDED_WS__ -D__SS_HALF__ -D__MPI__ -o $@ $+
+
 uts-mpi-ws-half-gslui: $(DM_SRCS) $(QUEUE_SRCS) mpi_wshalf.c $(RNG_SRC) $(COMMON_SRCS)
 	$(MPICC) $(MPICC_OPTS) $(MPILD_OPTS) $(RNG_DEF) $(FLAGS) $(GSL_FLAGS) -DTRACE -D__VS_GSLUI__ -D__SS_HALF__ -D__MPI__ -o $@ $+ $(GSL_FLAGS)
 
