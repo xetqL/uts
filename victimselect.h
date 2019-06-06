@@ -148,18 +148,42 @@ inline int selectvictim(int rank, int size, int last)
 }
 
 #elif defined(__GUIDED_WS__)
-#include <mpi.h>
-int *victims;    // Size == worldsize
-double *victimsWir;
-int *victimsAge;
 
-inline char* allocate_gossip_memory(int comm_size, int *buff_size)
-{
-    *buff_size = comm_size * sizeof(double) + comm_size * sizeof(int);
-    //printf("Buffer of size: %d\n", *buff_size);
-    return (char*) malloc(*buff_size);
+#include <mpi.h>
+#include <float.h>
+typedef double  GossipRawType;
+typedef double* GossipRawTypePtr;
+int MPIWS_GOSSIP_SHARE = 121231234;
+
+int *victims;    // Size == worldsize
+
+/*
+double *victimsWir;
+double *victimsAge;
+
+double *new_victimsWir;
+double *new_victimsAge;
+*/
+
+GossipRawTypePtr victimsData;
+
+inline double* allocate_gossip_memory(int comm_size, int *buff_size) {
+    *buff_size = 2 * comm_size * sizeof(GossipRawType);
+    return (GossipRawTypePtr) malloc(2 * comm_size * sizeof(GossipRawType));
 }
 
+inline double get_victim_age(int rank){ return victimsData[2*rank+1]; }
+inline double get_victim_wir(int rank){ return victimsData[2*rank];   }
+inline void   set_victim_age(int rank, GossipRawType age){ victimsData[2*rank+1] = age; }
+inline void   set_victim_wir(int rank, GossipRawType wir){ victimsData[2*rank]   = wir; }
+inline double get_timestamp() {
+    struct timeval  tv;
+    gettimeofday(&tv, NULL);
+
+    double time_in_mill =
+             (tv.tv_sec) * 1000 + (tv.tv_usec) / 1000 ;
+    return time_in_mill;//MPI_Wtime();
+}
 inline void vsinit(int rank, int comm_size)
 {
     srand(rank);
@@ -167,19 +191,31 @@ inline void vsinit(int rank, int comm_size)
     // allocate & init the victim array
     victims    = malloc((comm_size -1) * sizeof(int));
     //weights = malloc((comm_size -1) * sizeof(double));
-    victimsWir = calloc((comm_size)    , sizeof(double));
-    victimsAge = malloc((comm_size)    * sizeof(int));
+    //victimsWir = calloc((comm_size)    , sizeof(double));
+    //victimsAge = malloc((comm_size)    * sizeof(double));
+
+    //new_victimsWir = malloc(comm_size * sizeof(double));
+    //new_victimsAge = malloc(comm_size * sizeof(double));
+
+    victimsData = malloc(2 * comm_size * sizeof(GossipRawType)); //first is wir, then age
+    //new_victimsData = malloc(2 * comm_size * sizeof(double));
 
     for(i = 0, j = 0; i < comm_size; i++){
         if(i != rank) {
             victims[j++] = i;
         }
-        victimsAge[i] = -1;
+        set_victim_age(i, -1.0);
+        set_victim_wir(i,  0.0);
     }
 
+    if(rank == 0) {
+        printf("set\n");
+        set_victim_age(0,  get_timestamp());
+        set_victim_wir(0,  18092013.0);
+    }
 }
 
-inline char * vsdescript(void)
+inline char* vsdescript(void)
 {
 #if defined(__SS_HALF__)
     return "MPI Workstealing (Half Gossip Selection Candidate)";
@@ -187,49 +223,56 @@ inline char * vsdescript(void)
     return "MPI Workstealing (Gossip Selection Candidate)";
 #endif
 }
+int seed_knowledge = 0;
 
-inline void gossip_merge_unpack(char* buffer, int comm_size)
+#include <sys/time.h>
+
+inline void gossip_merge_unpack(GossipRawTypePtr rcv_buff, int comm_size, int rank, int from)
 {
-    const int FSIZE = comm_size * sizeof(double) + comm_size * sizeof(int);
+
     int i, position = 0;
 
     //receiving buffer
-    double *new_victimsWir = malloc(comm_size * sizeof(double));
-    int    *new_victimsAge = malloc(comm_size * sizeof(int));
 
     //unpack buffer
-    MPI_Unpack(buffer, FSIZE, &position, new_victimsWir, comm_size, MPI_DOUBLE, MPI_COMM_WORLD);
-    MPI_Unpack(buffer, FSIZE, &position, new_victimsAge, comm_size, MPI_INT,    MPI_COMM_WORLD);
+    //MPI_Unpack(buffer, FSIZE, &position, new_victimsWir, comm_size, MPI_DOUBLE, MPI_COMM_WORLD);
+    //MPI_Unpack(buffer, FSIZE, &position, new_victimsAge, comm_size, MPI_DOUBLE,    MPI_COMM_WORLD);
 
     //merge with existing data
     for(i = 0; i < comm_size; ++i) {
-        if(new_victimsAge[i] < victimsAge[i]){ //then replace data
-            victimsWir[i] = new_victimsWir[i];
-            victimsAge[i] = new_victimsAge[i];
+        //if(rank == 0)
+        //    printf("dbg from rank %d; %d, %f; %f\n", rank, i, rcv_buff[2*i+1], get_victim_age(i));
+        if(rcv_buff[2*i+1] > get_victim_age(i)){ // then replace data
+            //if(rank == 0)
+            //printf("Replace\n");
+
+            set_victim_wir(i, rcv_buff[2*i]);
+            set_victim_age(i, rcv_buff[2*i+1]);
         }
     }
 
-    free(new_victimsWir);
-    free(new_victimsAge);
+    if(get_victim_wir(0) == 18092013.0 && !seed_knowledge) {
+        seed_knowledge = 1;
+        struct timeval  tv;
+        gettimeofday(&tv, NULL);
+        double time_in_mill = (tv.tv_sec) * 1000 + (tv.tv_usec) / 1000;
+        printf("rank %d knows the seed %f gossip data at %f from %d\n", rank, get_victim_wir(0), get_timestamp(), from);
+    }
 }
 
-inline void gossip_pack(char* buffer, int comm_size)
+inline void gossip_pack(GossipRawTypePtr buffer, int comm_size)
 {
-    const int FSIZE = comm_size * sizeof(double) + comm_size * sizeof(int);
-    int i, position = 0;
+    const int FSIZE = 2* comm_size * sizeof(GossipRawType) ;
 
-    //Pack buffer
-    MPI_Pack(victimsWir, comm_size, MPI_DOUBLE, buffer, FSIZE, &position, MPI_COMM_WORLD);
-    MPI_Pack(victimsAge, comm_size, MPI_INT,    buffer, FSIZE, &position, MPI_COMM_WORLD);
+    memcpy(buffer, victimsData, FSIZE);
 
-    return;
 }
 
 inline int selectvictim(int rank, int size, int last)
 {
 
     int A, B, C;
-    double Awir, Bwir, Cwir;
+    GossipRawType Awir, Bwir, Cwir;
     int i;
 
     do {
@@ -245,7 +288,7 @@ inline int selectvictim(int rank, int size, int last)
     } while(C == rank || C == B || C == A);
 
     //select randomly if age are the same
-    if(victimsAge[A] == -1 && victimsAge[B] == -1 && victimsAge[C] == -1) {
+    if(get_victim_age(A) == -1 && get_victim_age(B) == -1 && get_victim_age(C) == -1) {
         i = rand() % 3;
         switch(i)
         {
@@ -255,14 +298,26 @@ inline int selectvictim(int rank, int size, int last)
         }
     }
 
-    Awir = victimsWir[A];
-    Bwir = victimsWir[B];
-    Cwir = victimsWir[C];
+    Awir = get_victim_wir(A);
+    Bwir = get_victim_wir(B);
+    Cwir = get_victim_wir(C);
 
-    if(Awir >= Bwir && Awir >= Cwir) return A;
-    if(Bwir >= Awir && Bwir >= Cwir) return B;
-    if(Cwir >= Awir && Cwir >= Bwir) return C;
-    return -1;
+    if(Awir > Bwir){
+        if(Awir > Cwir)
+            return A;
+        else
+            return C;
+    } else if (Bwir > Cwir)
+        return B;
+    else {
+        i = rand() % 3;
+        switch(i)
+        {
+            case 0: return A;
+            case 1: return B;
+            case 2: return C;
+        }
+    }
 }
 
 #else

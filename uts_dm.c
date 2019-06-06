@@ -111,25 +111,26 @@ void ss_error(char *str, int error)
  * details depend on tree type, node type and shape function
  *
  */
-void genChildren(Node * parent, void * child_buf, Node * child, StealStack * ss) {
+void genChildren(Node * parent, void * child_buf, Node * child, StealStack * ss, int *numChildren) {
   int parentHeight = parent->height;
-  int numChildren, childType;
+  int childType;
 
   ss->maxTreeDepth = max(ss->maxTreeDepth, parent->height);
 
-  numChildren = uts_numChildren(parent);
+  *numChildren = uts_numChildren(parent);
   childType   = uts_childType(parent);
 
   // record number of children in parent
-  parent->numChildren = numChildren;
+  parent->numChildren = *numChildren;
 
   // construct children and push onto stack
-  if (numChildren > 0) {
+
+  if (*numChildren > 0) {
     int i, j;
     child->type = childType;
     child->height = parentHeight + 1;
 
-    for (i = 0; i < numChildren; i++) {
+    for (i = 0; i < *numChildren; i++) {
       for (j = 0; j < computeGranularity; j++) {
         // TBD:  add parent height to spawn
         // computeGranularity controls number of rng_spawn calls per node
@@ -138,6 +139,7 @@ void genChildren(Node * parent, void * child_buf, Node * child, StealStack * ss)
 
       ss_put_work(ss, child_buf);
     }
+
   } else {
     ss->nLeaves++;
   }
@@ -171,14 +173,23 @@ void parTreeSearch(StealStack *ss) {
   parent_buf = parent;
   child_buf  = child;
 #endif
-
+  int i = 1;
+  ss->throughput = 0.0;
   while (ss_get_work(ss, parent_buf) == STATUS_HAVEWORK) {
-      genChildren(parent, child_buf, child, ss);
+      int children;
+
+      genChildren(parent, child_buf, child, ss, &children);
+
+      ss->throughput = (ss->throughput * (i-1) + children - 1.0) / i;
+
+      printf("Thread %3d: throughput is %f \n", ss_get_thread_num(), ss->throughput);
+    
 #if DEBUG_PROGRESS > 0
       // Debugging: Witness progress...
       if (ss->nNodes % DEBUG_PROGRESS == 0)
       	printf("Thread %3d: Progress is %d nodes\n", ss_get_thread_num(), ss->nNodes);
 #endif
+      i++;
   }
 
 #ifdef USING_GTC
@@ -276,13 +287,16 @@ void showStats() {
              stealStack[i].time[SS_SEARCH], stealStack[i].entries[SS_SEARCH]);
       printf("  idle time           = %.6f secs (%d sessions)\n",
              stealStack[i].time[SS_IDLE], stealStack[i].entries[SS_IDLE]);
+      printf("  throughput           = %.6f (%d nodes)\n",
+             stealStack[i].throughput, stealStack[i].nNodes);
       printf("\n");
     }
   }
 
 #ifdef TRACE
-  //ss_printTrace(stealStack, num_workers);
+  ss_printTrace(stealStack, num_workers);
 #endif
+  free(stealStack);
 }
 
 

@@ -126,11 +126,20 @@ void * release(StealStack *s)
 		return NULL; // Unreachable
 	}
 }
+/* restore stack to empty state */
+void mkEmpty(StealStack *s)
+{
+	deq_mkEmpty(localQueue);
+	s->localWork = 0;
+}
 
 #if defined(__GUIDED_WS__)
-static char*       wrin_buff;       // Buffer for accepting incoming work requests
-static char*       wrout_buff;      // Buffer to send outgoing work requests
+
+static double*     wrin_buff;       // Buffer for accepting incoming work requests
+static double*     wrout_buff;      // Buffer to send outgoing work requests
 static int 		   buff_size;
+
+
 /** Make progress on any outstanding WORKREQUESTs or WORKRESPONSEs */
 void ws_make_progress(StealStack *s)
 {
@@ -145,11 +154,12 @@ void ws_make_progress(StealStack *s)
 		// Got a work request
 		++ctrl_recvd;
 
-		/* Repost that work request listener */
-		MPI_Irecv(wrin_buff, buff_size, MPI_PACKED, MPI_ANY_SOURCE, MPIWS_WORKREQUEST, MPI_COMM_WORLD,
-			       	&wrin_request);
+		// buffer can be read
+		gossip_merge_unpack(wrin_buff, comm_size, comm_rank, status.MPI_SOURCE);
 
-		gossip_merge_unpack(wrin_buff, comm_size);
+		/* Repost that work request listener */
+		MPI_Irecv(wrin_buff, 2*comm_size, MPI_DOUBLE, MPI_ANY_SOURCE, MPIWS_WORKREQUEST, MPI_COMM_WORLD,
+			       	&wrin_request);
 
 		index = status.MPI_SOURCE;
 
@@ -167,6 +177,8 @@ void ws_make_progress(StealStack *s)
 			MPI_Send(owbuff, s->chunk_size*s->work_size*tosend, MPI_BYTE, index,
 				MPIWS_WORKRESPONSE, MPI_COMM_WORLD);
 
+
+
 			/* If a node to our left steals from us, our color becomes black */
 			if (index < comm_rank) my_color = BLACK;
 		} else {
@@ -174,6 +186,11 @@ void ws_make_progress(StealStack *s)
 			++ctrl_sent;
 			MPI_Send(NULL, 0, MPI_BYTE, index, MPIWS_WORKRESPONSE, MPI_COMM_WORLD);
 		}
+
+		GossipRawTypePtr share_buff = (GossipRawTypePtr) malloc(2*comm_size*sizeof(GossipRawType));
+		gossip_pack(share_buff, comm_size);
+		MPI_Send(share_buff, 2*comm_size, MPI_DOUBLE, index, MPIWS_GOSSIP_SHARE, MPI_COMM_WORLD);
+		free(share_buff);
 
 		if (pollint_isadaptive && s->localWork != 0)
 			polling_interval = max(pollint_min, POLLINT_SHRINK);
@@ -220,10 +237,11 @@ int ensureLocalWork(StealStack *s)
 
 			gossip_pack(wrout_buff, comm_size);
 
-			MPI_Isend(&wrout_buff, buff_size, MPI_PACKED, last_steal, MPIWS_WORKREQUEST, MPI_COMM_WORLD, &wrout_request);
+			MPI_Isend(wrout_buff, 2*comm_size, MPI_DOUBLE, last_steal, MPIWS_WORKREQUEST, MPI_COMM_WORLD, &wrout_request);
 
 			MPI_Irecv(iwbuff, s->chunk_size*s->work_size*WORKBUF_SIZE, MPI_BYTE, last_steal, MPIWS_WORKRESPONSE,
 					MPI_COMM_WORLD, &iw_request);
+
 		}
 
 		// Call into the stealing progress engine and update our color
@@ -238,6 +256,7 @@ int ensureLocalWork(StealStack *s)
 			MPI_Get_count(&status, MPI_BYTE, &work_rcv);
 
 			if (work_rcv > 0) {
+
 				while(work_rcv > 0)
 				{
 					StealStackNode *node;
@@ -273,8 +292,14 @@ int ensureLocalWork(StealStack *s)
 				s->nFail++;
 			}
 
+
 			// Clear on the outgoing work_request
 			MPI_Wait(&wrout_request, &status);
+
+			// use the send buffer to receive /!/
+			MPI_Recv(wrout_buff, 2*comm_size, MPI_DOUBLE, last_steal, MPIWS_GOSSIP_SHARE, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+			gossip_merge_unpack(wrout_buff, comm_size, comm_rank, last_steal);
+
 		}
 
 		/* Test if we have the token */
@@ -425,8 +450,9 @@ int ss_start(int work_size, int chunk_size)
 	ctrl_sent     = 0;
 	ctrl_recvd    = 0;
 
-	iwbuff = calloc(chunk_size*work_size*WORKBUF_SIZE, sizeof(char));
-	owbuff = calloc(chunk_size*work_size*WORKBUF_SIZE, sizeof(char));
+	printf("Buff size: %d\n", chunk_size * work_size * WORKBUF_SIZE);
+	iwbuff = calloc(chunk_size * work_size * WORKBUF_SIZE, sizeof(char));
+	owbuff = calloc(chunk_size * work_size * WORKBUF_SIZE, sizeof(char));
 
 	// Using adaptive polling interval?
 	if (polling_interval == 0) {
@@ -438,12 +464,9 @@ int ss_start(int work_size, int chunk_size)
 	my_color       = WHITE;
 	td_token.color = BLACK;
 	//printf("%d, %d", sizeof(char), sizeof(int));
-	//allocate buffer of same sizes
-	wrin_buff  = allocate_gossip_memory(comm_size, &buff_size);
-	wrout_buff = allocate_gossip_memory(comm_size, &buff_size);
 
 	// Setup non-blocking recieve for recieving shared work requests
-	MPI_Irecv(wrin_buff, buff_size, MPI_PACKED, MPI_ANY_SOURCE, MPIWS_WORKREQUEST, MPI_COMM_WORLD, &wrin_request);
+	MPI_Irecv(wrin_buff, 2*comm_size, MPI_DOUBLE, MPI_ANY_SOURCE, MPIWS_WORKREQUEST, MPI_COMM_WORLD, &wrin_request);
 
 	/* Set up the termination detection receives */
 	if (comm_rank == 0) {
@@ -458,12 +481,53 @@ int ss_start(int work_size, int chunk_size)
 
 	return 1;
 }
+
 void ss_finalize()
 {
 	free(wrin_buff);
 	free(wrout_buff);
 	MPI_Finalize();
 }
+
+
+/* initialize the stack */
+StealStack* ss_init(int *argc, char ***argv)
+{
+	StealStack* s = &stealStack;
+
+	MPI_Init(argc, argv);
+
+	MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
+	MPI_Comm_rank(MPI_COMM_WORLD, &comm_rank);
+
+        s->globalWork = 0;
+        s->localWork  = 0;
+
+	s->nNodes     = 0;
+        s->nLeaves    = 0;
+	s->nAcquire   = 0;
+	s->nRelease   = 0;
+	s->nSteal     = 0;
+	s->nFail      = 0;
+	s->nCreate      = 0;
+
+        s->maxStackDepth = 0;
+        s->maxTreeDepth  = 0;
+
+	localQueue = deq_create();
+	mkEmpty(s);
+
+	// Set a default polling interval
+	polling_interval = pollint_default;
+
+	//allocate buffer of same sizes
+	wrin_buff  = allocate_gossip_memory(comm_size, &buff_size);
+	wrout_buff = allocate_gossip_memory(comm_size, &buff_size);
+
+	vsinit(comm_rank,comm_size);
+	return s;
+}
+
 #else
 static long        wrin_buff;       // Buffer for accepting incoming work requests
 static long        wrout_buff;      // Buffer to send outgoing work requests
@@ -789,14 +853,6 @@ void ss_finalize()
 
 	MPI_Finalize();
 }
-#endif
-
-/* restore stack to empty state */
-void mkEmpty(StealStack *s)
-{
-	deq_mkEmpty(localQueue);
-	s->localWork = 0;
-}
 
 
 /* initialize the stack */
@@ -809,19 +865,19 @@ StealStack* ss_init(int *argc, char ***argv)
 	MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
 	MPI_Comm_rank(MPI_COMM_WORLD, &comm_rank);
 
-        s->globalWork = 0;
-        s->localWork  = 0;
+	s->globalWork = 0;
+	s->localWork  = 0;
 
 	s->nNodes     = 0;
-        s->nLeaves    = 0;
+	s->nLeaves    = 0;
 	s->nAcquire   = 0;
 	s->nRelease   = 0;
 	s->nSteal     = 0;
 	s->nFail      = 0;
 	s->nCreate      = 0;
 
-        s->maxStackDepth = 0;
-        s->maxTreeDepth  = 0;
+	s->maxStackDepth = 0;
+	s->maxTreeDepth  = 0;
 
 	localQueue = deq_create();
 	mkEmpty(s);
@@ -832,6 +888,8 @@ StealStack* ss_init(int *argc, char ***argv)
 	vsinit(comm_rank,comm_size);
 	return s;
 }
+
+#endif
 
 
 

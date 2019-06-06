@@ -63,10 +63,11 @@ typedef struct stealRecord_t StealRecord;
 
 /* data per thread */
 struct stealStack_t {
+	double throughput;  /* average pop/push ratio */
 	int globalWork;     /* amount work available for stealing */
 	int localWork;      /* amount of local only work*/
 	int work_size;      /* size of a work node*/
-	int chunk_size;     /* amount of work in a steal stack node, also the granularity of steals*/
+	int chunk_size;     /* amount of work in a steal stack node, also the granularity of steals */
 	counter_t nNodes, nLeaves, nAcquire, nRelease, nSteal, nFail;  /* stats */
 	counter_t nCreate; /* number of nodes created locally */
 	int maxStackDepth;
