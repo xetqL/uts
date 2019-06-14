@@ -24,6 +24,8 @@ ifndef RNG
 RNG=BRG
 endif
 
+MPICC=mpic++ -std=c++14
+
 ifeq ($(RNG), Devine) 
 RNG_SRC = rng/devine_sha1.c
 RNG_INCL= rng/devine_sha1.h
@@ -61,6 +63,12 @@ $(CONFFILE):
 
 tags:
 	ctags --recurse --language-force=C rng *.c *.h
+
+dequeue.o:
+	gcc -std=c99 -c -o dequeue.o dequeue.c
+
+dlist.o:
+	gcc -std=c99 -c -o dlist.o dlist.c
 
 ########## Sequential Implementations ##########
 
@@ -101,7 +109,7 @@ uts-mpi-ws-half: $(DM_SRCS) $(QUEUE_SRCS) mpi_wshalf.c $(RNG_SRC) $(COMMON_SRCS)
 uts-mpi-ws-half-rand: $(DM_SRCS) $(QUEUE_SRCS) mpi_wshalf.c $(RNG_SRC) $(COMMON_SRCS)
 	$(MPICC) $(MPICC_OPTS) $(MPILD_OPTS) $(RNG_DEF) $(FLAGS) -D__VS_RAND__ -D__SS_HALF__ -D__MPI__ -o $@ $+
 
-uts-mpi-guidedws-half-rand: $(DM_SRCS) $(QUEUE_SRCS) mpi_wshalf.c $(RNG_SRC) $(COMMON_SRCS)
+uts-mpi-guidedws-half-rand: $(DM_SRCS) $(QUEUE_SRCS) mpi_wshalf.c window.hh $(RNG_SRC) $(COMMON_SRCS)
 	$(MPICC) $(MPICC_OPTS) $(MPILD_OPTS) $(RNG_DEF) $(FLAGS) -D__GUIDED_WS__ -D__SS_HALF__ -D__MPI__ -o $@ $+
 
 uts-mpi-ws-half-gslui: $(DM_SRCS) $(QUEUE_SRCS) mpi_wshalf.c $(RNG_SRC) $(COMMON_SRCS)
@@ -165,7 +173,6 @@ clean: config
 
 distclean: clean
 	rm -f $(CONFFILE)
-
 distrib: clean
 	mkdir distrib
 	tar -X DIST_EXCLUDE -c * | tar -C distrib/ -xf -

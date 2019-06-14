@@ -18,7 +18,7 @@
 #include <stdlib.h>
 
 dequeue deq_create(){
-  dequeue q = malloc(sizeof(struct dequeue));
+  dequeue q = (__dequeue*) malloc(sizeof(struct __dequeue));
   q -> head = dcons(NULL, NULL, NULL);
   q -> tail = dcons(NULL, NULL, NULL);
   q -> head -> next = q -> tail;

@@ -40,8 +40,8 @@
  *  and their default values are given below.              *
  ***********************************************************/
 
-char * uts_trees_str[]     = { "Binomial", "Geometric", "Hybrid", "Balanced" };
-char * uts_geoshapes_str[] = { "Linear decrease", "Exponential decrease", "Cyclic", 
+const char * uts_trees_str[]     = { "Binomial", "Geometric", "Hybrid", "Balanced" };
+const char  * uts_geoshapes_str[] = { "Linear decrease", "Exponential decrease", "Cyclic",
                               "Fixed branching factor" };
 
 /* Tree type
@@ -397,7 +397,7 @@ void uts_parseParams(int argc, char *argv[]){
       case 'f':
         shiftDepth = atof(argv[i+1]); break;
       case 'g':
-        computeGranularity = max(1,atoi(argv[i+1])); break;
+        computeGranularity = std::max(1,atoi(argv[i+1])); break;
       default:
         err = i;
     }

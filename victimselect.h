@@ -172,24 +172,26 @@ inline double* allocate_gossip_memory(int comm_size, int *buff_size) {
     return (GossipRawTypePtr) malloc(2 * comm_size * sizeof(GossipRawType));
 }
 
-inline double get_victim_age(int rank){ return victimsData[2*rank+1]; }
-inline double get_victim_wir(int rank){ return victimsData[2*rank];   }
-inline void   set_victim_age(int rank, GossipRawType age){ victimsData[2*rank+1] = age; }
-inline void   set_victim_wir(int rank, GossipRawType wir){ victimsData[2*rank]   = wir; }
+inline double get_victim_age(int rank) { return victimsData[2*rank+1]; }
+inline double get_victim_wir(int rank) { return victimsData[2*rank];   }
+inline void   set_victim_age(int rank, GossipRawType age) { victimsData[2*rank+1] = age; }
+inline void   set_victim_wir(int rank, GossipRawType wir) { victimsData[2*rank]   = wir; }
+
 inline double get_timestamp() {
-    struct timeval  tv;
+    /*struct timeval  tv;
     gettimeofday(&tv, NULL);
 
     double time_in_mill =
              (tv.tv_sec) * 1000 + (tv.tv_usec) / 1000 ;
-    return time_in_mill;//MPI_Wtime();
+    return time_in_mill;//MPI_Wtime();*/
+    return MPI_Wtime();
 }
-inline void vsinit(int rank, int comm_size)
-{
+
+inline void vsinit(int rank, int comm_size) {
     srand(rank);
     int i,j;
     // allocate & init the victim array
-    victims    = malloc((comm_size -1) * sizeof(int));
+    victims    = (int*) malloc((comm_size -1) * sizeof(int));
     //weights = malloc((comm_size -1) * sizeof(double));
     //victimsWir = calloc((comm_size)    , sizeof(double));
     //victimsAge = malloc((comm_size)    * sizeof(double));
@@ -197,7 +199,7 @@ inline void vsinit(int rank, int comm_size)
     //new_victimsWir = malloc(comm_size * sizeof(double));
     //new_victimsAge = malloc(comm_size * sizeof(double));
 
-    victimsData = malloc(2 * comm_size * sizeof(GossipRawType)); //first is wir, then age
+    victimsData = (double*) malloc(2 * comm_size * sizeof(GossipRawType)); //first is wir, then age
     //new_victimsData = malloc(2 * comm_size * sizeof(double));
 
     for(i = 0, j = 0; i < comm_size; i++){
@@ -229,7 +231,6 @@ int seed_knowledge = 0;
 
 inline void gossip_merge_unpack(GossipRawTypePtr rcv_buff, int comm_size, int rank, int from)
 {
-
     int i, position = 0;
 
     //receiving buffer
@@ -260,12 +261,9 @@ inline void gossip_merge_unpack(GossipRawTypePtr rcv_buff, int comm_size, int ra
     }
 }
 
-inline void gossip_pack(GossipRawTypePtr buffer, int comm_size)
-{
+inline void gossip_pack(GossipRawTypePtr buffer, int comm_size){
     const int FSIZE = 2* comm_size * sizeof(GossipRawType) ;
-
     memcpy(buffer, victimsData, FSIZE);
-
 }
 
 inline int selectvictim(int rank, int size, int last)
@@ -315,7 +313,7 @@ inline int selectvictim(int rank, int size, int last)
         {
             case 0: return A;
             case 1: return B;
-            case 2: return C;
+            default: return C;
         }
     }
 }

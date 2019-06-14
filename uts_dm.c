@@ -115,7 +115,7 @@ void genChildren(Node * parent, void * child_buf, Node * child, StealStack * ss,
   int parentHeight = parent->height;
   int childType;
 
-  ss->maxTreeDepth = max(ss->maxTreeDepth, parent->height);
+  ss->maxTreeDepth = std::max(ss->maxTreeDepth, parent->height);
 
   *numChildren = uts_numChildren(parent);
   childType   = uts_childType(parent);
@@ -157,6 +157,9 @@ void genChildren(Node * parent, void * child_buf, Node * child, StealStack * ss,
 #include "tc.h"
 #endif
 
+#include "window.hh"
+SlidingWindow<double> throughput_node(50);
+
 void parTreeSearch(StealStack *ss) {
   Node *parent;
   Node *child;
@@ -168,11 +171,12 @@ void parTreeSearch(StealStack *ss) {
   child_buf  = (void*) gtc_task_create_ofclass(sizeof(Node), uts_tclass);
   child      = gtc_task_body((task_t*)child_buf);
 #else
-  child      = malloc(sizeof(Node));
-  parent     = malloc(sizeof(Node));
+  child      = (Node*) malloc(sizeof(Node));
+  parent     = (Node*) malloc(sizeof(Node));
   parent_buf = parent;
   child_buf  = child;
 #endif
+
   int i = 1;
   ss->throughput = 0.0;
   while (ss_get_work(ss, parent_buf) == STATUS_HAVEWORK) {
@@ -180,9 +184,12 @@ void parTreeSearch(StealStack *ss) {
 
       genChildren(parent, child_buf, child, ss, &children);
 
-      ss->throughput = (ss->throughput * (i-1) + children - 1.0) / i;
+      children--;
 
-      printf("Thread %3d: throughput is %f \n", ss_get_thread_num(), ss->throughput);
+      throughput_node.add(children);
+      ss->throughput = throughput_node.mean();
+
+      printf("Thread %3d: throughput %d with mean within a 50 pop/push window of %f \n", ss_get_thread_num(), (children), ss->throughput);
     
 #if DEBUG_PROGRESS > 0
       // Debugging: Witness progress...
@@ -213,7 +220,7 @@ void showStats() {
   int num_workers;
   StealStack *stealStack;
 
-  stealStack = malloc(sizeof(StealStack)*ss_get_num_threads());
+  stealStack = (StealStack*) malloc(sizeof(StealStack)*ss_get_num_threads());
   if (!stealStack)
     ss_error("showStats(): out of memory\n", 10);
 
@@ -240,8 +247,8 @@ void showStats() {
     tsearch += stealStack[i].time[SS_SEARCH];
     tidle   += stealStack[i].time[SS_IDLE];
     tovh    += stealStack[i].time[SS_OVH];
-    mdepth   = max(mdepth, stealStack[i].maxStackDepth);
-    mheight  = max(mheight, stealStack[i].maxTreeDepth);
+    mdepth   = std::max(mdepth, (counter_t) stealStack[i].maxStackDepth);
+    mheight  = std::max(mheight, (counter_t) stealStack[i].maxTreeDepth);
 
     for (j = 0; j < SS_NSTATES; j++) {
       if (max_times[j] < stealStack[i].time[j])
@@ -325,7 +332,7 @@ int main(int argc, char *argv[]) {
   root     = gtc_task_body(root_buf);
 #else
   root_buf = alloca(sizeof(Node));
-  root     = root_buf;
+  root     = (Node*) root_buf;
 #endif
 
   fflush(NULL);

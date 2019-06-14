@@ -17,7 +17,7 @@
 #include <stdlib.h>
 
 dlist dcons(void *element, dlist prev, dlist next){
-  dlist temp = malloc(sizeof(struct dcell));
+  dlist temp = (dcell*) malloc(sizeof(struct dcell));
   temp -> element = element;
   temp -> prev = prev;
   temp -> next = next;

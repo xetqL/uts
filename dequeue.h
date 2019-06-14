@@ -17,11 +17,11 @@
 #define DEQUEUE_H
 #include "dlist.h"
 
-struct dequeue{
+struct __dequeue {
   dlist head;
   dlist tail;
 };
-typedef struct dequeue *dequeue;
+typedef struct __dequeue *dequeue;
 
 /* create an empty dqueue */
 extern dequeue deq_create();

@@ -66,7 +66,7 @@ static void dump_hex(char *out, void *in, int nbytes)
 	/* out should be twice as long as nbytes since we generate 2 chars per byte */
 	int i;
 	char l,r;
-	char *cin = in;
+	char *cin = (char*) in;
 
 	for (i = 0; i < nbytes; i++) {
 		l = (cin[i] & 0xF0) >> 4;

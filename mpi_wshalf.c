@@ -35,7 +35,7 @@
 
 enum uts_tags { MPIWS_WORKREQUEST = 1, MPIWS_WORKRESPONSE, MPIWS_TDTOKEN, MPIWS_STATS };
 enum colors { BLACK = 0, WHITE, PINK, RED };
-char *color_names[] = { "BLACK", "WHITE", "PINK", "RED" };
+const char *color_names[] = { "BLACK", "WHITE", "PINK", "RED" };
 
 typedef struct {
 	enum colors color;
@@ -105,7 +105,7 @@ void * release(StealStack *s)
 	void *work;
 
 	/* Get a node from the back of the queue to release */
-	node = deq_popBack(localQueue);
+	node = (StealStackNode*) deq_popBack(localQueue);
 
 	if (node) {
 		/* If this node is not full we can't release it. */
@@ -134,74 +134,74 @@ void mkEmpty(StealStack *s)
 }
 
 #if defined(__GUIDED_WS__)
+#include "window.hh"
 
 static double*     wrin_buff;       // Buffer for accepting incoming work requests
 static double*     wrout_buff;      // Buffer to send outgoing work requests
 static int 		   buff_size;
 
-
 /** Make progress on any outstanding WORKREQUESTs or WORKRESPONSEs */
 void ws_make_progress(StealStack *s)
 {
-	MPI_Status  status;
-	int         flag, index;
-	void       *work;
+    MPI_Status  status;
+    int         flag, index;
+    void       *work;
 
-	// Test for incoming work_requests
-	MPI_Test(&wrin_request, &flag, &status);
+    // Test for incoming work_requests
+    MPI_Test(&wrin_request, &flag, &status);
 
-	if (flag) {
-		// Got a work request
-		++ctrl_recvd;
+    if (flag) {
+        // Got a work request
+        ++ctrl_recvd;
 
-		// buffer can be read
-		gossip_merge_unpack(wrin_buff, comm_size, comm_rank, status.MPI_SOURCE);
+        // buffer can be read
+        gossip_merge_unpack(wrin_buff, comm_size, comm_rank, status.MPI_SOURCE);
 
-		/* Repost that work request listener */
-		MPI_Irecv(wrin_buff, 2*comm_size, MPI_DOUBLE, MPI_ANY_SOURCE, MPIWS_WORKREQUEST, MPI_COMM_WORLD,
-			       	&wrin_request);
+        /* Repost that work request listener */
+        MPI_Irecv(wrin_buff, 2*comm_size, MPI_DOUBLE, MPI_ANY_SOURCE, MPIWS_WORKREQUEST, MPI_COMM_WORLD,
+                       &wrin_request);
 
-		index = status.MPI_SOURCE;
+        index = status.MPI_SOURCE;
 
-		/* Check if we have any surplus work */
-		if (s->localWork > 2*s->chunk_size) {
-			size_t tosend = (s->localWork/s->chunk_size)/2;
-			for(int i = 0; i < tosend; i++)
-			{
-				work = release(s);
-				DEBUG(DBG_CHUNK, printf(" -Thread %d: Releasing a chunk to thread %d\n", comm_rank, index));
-				++chunks_sent;
-				memcpy(owbuff+i*s->work_size*s->chunk_size,work,s->work_size*s->chunk_size);
-				free(work);
-			}
-			MPI_Send(owbuff, s->chunk_size*s->work_size*tosend, MPI_BYTE, index,
-				MPIWS_WORKRESPONSE, MPI_COMM_WORLD);
-
-
-
-			/* If a node to our left steals from us, our color becomes black */
-			if (index < comm_rank) my_color = BLACK;
-		} else {
-			// Send a "no work" response
-			++ctrl_sent;
-			MPI_Send(NULL, 0, MPI_BYTE, index, MPIWS_WORKRESPONSE, MPI_COMM_WORLD);
-		}
-
-		GossipRawTypePtr share_buff = (GossipRawTypePtr) malloc(2*comm_size*sizeof(GossipRawType));
-		gossip_pack(share_buff, comm_size);
-		MPI_Send(share_buff, 2*comm_size, MPI_DOUBLE, index, MPIWS_GOSSIP_SHARE, MPI_COMM_WORLD);
-		free(share_buff);
-
-		if (pollint_isadaptive && s->localWork != 0)
-			polling_interval = max(pollint_min, POLLINT_SHRINK);
+        /* Check if we have any surplus work */
+        if (s->localWork > 2*s->chunk_size) {
+            size_t tosend = (s->localWork/s->chunk_size)/2;
+            for(int i = 0; i < tosend; i++)
+            {
+                work = release(s);
+                DEBUG(DBG_CHUNK, printf(" -Thread %d: Releasing a chunk to thread %d\n", comm_rank, index));
+                ++chunks_sent;
+                memcpy(owbuff+i*s->work_size*s->chunk_size,work,s->work_size*s->chunk_size);
+                free(work);
+            }
+            MPI_Send(owbuff, s->chunk_size*s->work_size*tosend, MPI_BYTE, index,
+                MPIWS_WORKRESPONSE, MPI_COMM_WORLD);
 
 
-	} else {
-		if (pollint_isadaptive && s->localWork != 0)
-			polling_interval = min(pollint_max, POLLINT_GROW);
-	}
 
-	return;
+            /* If a node to our left steals from us, our color becomes black */
+            if (index < comm_rank) my_color = BLACK;
+        } else {
+            // Send a "no work" response
+            ++ctrl_sent;
+            MPI_Send(NULL, 0, MPI_BYTE, index, MPIWS_WORKRESPONSE, MPI_COMM_WORLD);
+        }
+
+        GossipRawTypePtr share_buff = (GossipRawTypePtr) malloc(2*comm_size*sizeof(GossipRawType));
+        gossip_pack(share_buff, comm_size);
+        MPI_Send(share_buff, 2*comm_size, MPI_DOUBLE, index, MPIWS_GOSSIP_SHARE, MPI_COMM_WORLD);
+        free(share_buff);
+
+        if (pollint_isadaptive && s->localWork != 0)
+            polling_interval = std::max(pollint_min, POLLINT_SHRINK);
+
+
+    } else {
+        if (pollint_isadaptive && s->localWork != 0)
+            polling_interval = std::min(pollint_max, POLLINT_GROW);
+    }
+
+    return;
 }
 
 /**
@@ -211,321 +211,321 @@ void ws_make_progress(StealStack *s)
  **/
 int ensureLocalWork(StealStack *s)
 {
-	MPI_Status  status;
-	int         flag;
+    MPI_Status  status;
+    int         flag;
 
-	if (s->localWork < 0)
-		ss_error("ensureLocalWork(): localWork count is less than 0!", 2);
+    if (s->localWork < 0)
+        ss_error("ensureLocalWork(): localWork count is less than 0!", 2);
 
-	/* If no more work */
-	while (s->localWork == 0) {
-		if (comm_size == 1) return -1;
+    /* If no more work */
+    while (s->localWork == 0) {
+        if (comm_size == 1) return -1;
 
-		if (my_color == PINK)
-			ss_setState(s, SS_IDLE);
-		else
-			ss_setState(s, SS_SEARCH);
+        if (my_color == PINK)
+            ss_setState(s, SS_IDLE);
+        else
+            ss_setState(s, SS_SEARCH);
 
-		/* Check if we should post another steal request */
-		if (wrout_request == MPI_REQUEST_NULL && my_color != PINK) {
+        /* Check if we should post another steal request */
+        if (wrout_request == MPI_REQUEST_NULL && my_color != PINK) {
 
-			/* Send the request and wait for a work response */
-			last_steal = selectvictim(comm_rank, comm_size, last_steal);
+            /* Send the request and wait for a work response */
+            last_steal = selectvictim(comm_rank, comm_size, last_steal);
 
-			DEBUG(DBG_CHUNK, printf("Thread %d: Asking thread %d for work\n", comm_rank, last_steal));
-			++ctrl_sent;
+            DEBUG(DBG_CHUNK, printf("Thread %d: Asking thread %d for work\n", comm_rank, last_steal));
+            ++ctrl_sent;
 
-			gossip_pack(wrout_buff, comm_size);
+            gossip_pack(wrout_buff, comm_size);
 
-			MPI_Isend(wrout_buff, 2*comm_size, MPI_DOUBLE, last_steal, MPIWS_WORKREQUEST, MPI_COMM_WORLD, &wrout_request);
+            MPI_Isend(wrout_buff, 2*comm_size, MPI_DOUBLE, last_steal, MPIWS_WORKREQUEST, MPI_COMM_WORLD, &wrout_request);
 
-			MPI_Irecv(iwbuff, s->chunk_size*s->work_size*WORKBUF_SIZE, MPI_BYTE, last_steal, MPIWS_WORKRESPONSE,
-					MPI_COMM_WORLD, &iw_request);
+            MPI_Irecv(iwbuff, s->chunk_size*s->work_size*WORKBUF_SIZE, MPI_BYTE, last_steal, MPIWS_WORKRESPONSE,
+                    MPI_COMM_WORLD, &iw_request);
 
-		}
+        }
 
-		// Call into the stealing progress engine and update our color
-		ws_make_progress(s);
+        // Call into the stealing progress engine and update our color
+        ws_make_progress(s);
 
-		// Test for incoming work
-		MPI_Test(&iw_request, &flag, &status);
+        // Test for incoming work
+        MPI_Test(&iw_request, &flag, &status);
 
-		if (flag && wrout_request != MPI_REQUEST_NULL) {
-			int work_rcv;
+        if (flag && wrout_request != MPI_REQUEST_NULL) {
+            int work_rcv;
 
-			MPI_Get_count(&status, MPI_BYTE, &work_rcv);
+            MPI_Get_count(&status, MPI_BYTE, &work_rcv);
 
-			if (work_rcv > 0) {
+            if (work_rcv > 0) {
 
-				while(work_rcv > 0)
-				{
-					StealStackNode *node;
+                while(work_rcv > 0)
+                {
+                    StealStackNode *node;
 
-					++chunks_recvd;
-					DEBUG(DBG_CHUNK, printf(" -Thread %d: Incoming Work received, %d bytes\n", comm_rank, work_rcv));
-					/* Create a new node to attach this work to */
-					node = (StealStackNode*)malloc(sizeof(StealStackNode));
+                    ++chunks_recvd;
+                    DEBUG(DBG_CHUNK, printf(" -Thread %d: Incoming Work received, %d bytes\n", comm_rank, work_rcv));
+                    /* Create a new node to attach this work to */
+                    node = (StealStackNode*)malloc(sizeof(StealStackNode));
 
-					if (!node)
-						ss_error("ensureLocalWork(): Out of virtual memory.", 10);
+                    if (!node)
+                        ss_error("ensureLocalWork(): Out of virtual memory.", 10);
 
-					node->head = s->chunk_size;
-					node->work = malloc(s->chunk_size * s->work_size);
-					work_rcv -= s->chunk_size*s->work_size;
-					memcpy(node->work,(iwbuff+work_rcv),s->chunk_size*s->work_size);
+                    node->head = s->chunk_size;
+                    node->work = malloc(s->chunk_size * s->work_size);
+                    work_rcv -= s->chunk_size*s->work_size;
+                    memcpy(node->work,(iwbuff+work_rcv),s->chunk_size*s->work_size);
 
-					ctrk_get(comm_rank, node->work);
+                    ctrk_get(comm_rank, node->work);
 
-					/* Push stolen work onto the back of the queue */
-					s->nSteal++;
-					s->localWork += s->chunk_size;
-					deq_pushBack(localQueue, node);
-				}
+                    /* Push stolen work onto the back of the queue */
+                    s->nSteal++;
+                    s->localWork += s->chunk_size;
+                    deq_pushBack(localQueue, node);
+                }
 #ifdef TRACE
-				/* Successful Steal */
-				ss_markSteal(s, status.MPI_SOURCE);
+                /* Successful Steal */
+                ss_markSteal(s, status.MPI_SOURCE);
 #endif
-			}
-			else {
-				// Received "No Work" message
-				++ctrl_recvd;
-				s->nFail++;
-			}
+            }
+            else {
+                // Received "No Work" message
+                ++ctrl_recvd;
+                s->nFail++;
+            }
 
 
-			// Clear on the outgoing work_request
-			MPI_Wait(&wrout_request, &status);
+            // Clear on the outgoing work_request
+            MPI_Wait(&wrout_request, &status);
 
-			// use the send buffer to receive /!/
-			MPI_Recv(wrout_buff, 2*comm_size, MPI_DOUBLE, last_steal, MPIWS_GOSSIP_SHARE, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-			gossip_merge_unpack(wrout_buff, comm_size, comm_rank, last_steal);
+            // use the send buffer to receive /!/
+            MPI_Recv(wrout_buff, 2*comm_size, MPI_DOUBLE, last_steal, MPIWS_GOSSIP_SHARE, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            gossip_merge_unpack(wrout_buff, comm_size, comm_rank, last_steal);
 
-		}
+        }
 
-		/* Test if we have the token */
-		MPI_Test(&td_request, &flag, &status);
+        /* Test if we have the token */
+        MPI_Test(&td_request, &flag, &status);
 
-		if (flag) {
-			enum colors next_token;
-			int         forward_token = 1;
+        if (flag) {
+            enum colors next_token;
+            int         forward_token = 1;
 
-			DEBUG(DBG_TOKEN, printf("ensureLocalWork(): Thread %d received %s token\n", comm_rank, color_names[td_token.color]));
-			switch (td_token.color) {
-				case WHITE:
-					if (s->localWork == 0) {
-						if (comm_rank == 0 && my_color == WHITE) {
-							if (td_token.recv_count != td_token.send_count) {
-							// There are outstanding messages, try again
-								DEBUG(DBG_MSGCNT, printf(" TD_RING: In-flight work, recirculating token\n"));
-								my_color = WHITE;
-								next_token = WHITE;
-							} else {
-							// Termination detected, pass RED token
-								my_color = PINK;
-								next_token = PINK;
-							}
-						} else if (my_color == WHITE) {
-							next_token = WHITE;
-						} else {
-							// Every time we forward the token, we change
-							// our color back to white
-							my_color = WHITE;
-							next_token = BLACK;
-						}
+            DEBUG(DBG_TOKEN, printf("ensureLocalWork(): Thread %d received %s token\n", comm_rank, color_names[td_token.color]));
+            switch (td_token.color) {
+                case WHITE:
+                    if (s->localWork == 0) {
+                        if (comm_rank == 0 && my_color == WHITE) {
+                            if (td_token.recv_count != td_token.send_count) {
+                            // There are outstanding messages, try again
+                                DEBUG(DBG_MSGCNT, printf(" TD_RING: In-flight work, recirculating token\n"));
+                                my_color = WHITE;
+                                next_token = WHITE;
+                            } else {
+                            // Termination detected, pass RED token
+                                my_color = PINK;
+                                next_token = PINK;
+                            }
+                        } else if (my_color == WHITE) {
+                            next_token = WHITE;
+                        } else {
+                            // Every time we forward the token, we change
+                            // our color back to white
+                            my_color = WHITE;
+                            next_token = BLACK;
+                        }
 
-						// forward message
-						forward_token = 1;
-					}
-					else {
-						forward_token = 0;
-					}
-					break;
-				case PINK:
-					if (comm_rank == 0) {
-						if (td_token.recv_count != td_token.send_count) {
-							// There are outstanding messages, try again
-							DEBUG(DBG_MSGCNT, printf(" TD_RING: ReCirculating pink token nr=%ld ns=%ld\n", td_token.recv_count, td_token.send_count));
-							my_color = PINK;
-							next_token = PINK;
-						} else {
-							// Termination detected, pass RED token
-							my_color = RED;
-							next_token = RED;
-						}
-					} else {
-						my_color = PINK;
-						next_token = PINK;
-					}
+                        // forward message
+                        forward_token = 1;
+                    }
+                    else {
+                        forward_token = 0;
+                    }
+                    break;
+                case PINK:
+                    if (comm_rank == 0) {
+                        if (td_token.recv_count != td_token.send_count) {
+                            // There are outstanding messages, try again
+                            DEBUG(DBG_MSGCNT, printf(" TD_RING: ReCirculating pink token nr=%ld ns=%ld\n", td_token.recv_count, td_token.send_count));
+                            my_color = PINK;
+                            next_token = PINK;
+                        } else {
+                            // Termination detected, pass RED token
+                            my_color = RED;
+                            next_token = RED;
+                        }
+                    } else {
+                        my_color = PINK;
+                        next_token = PINK;
+                    }
 
-					forward_token = 1;
-					break;
-				case BLACK:
-					// Non-Termination: Token must be recirculated
-					if (comm_rank == 0)
-						next_token = WHITE;
-					else {
-						my_color = WHITE;
-						next_token = BLACK;
-					}
-					forward_token = 1;
-					break;
-				case RED:
-					// Termination: Set our state to RED and circulate term message
-					my_color = RED;
-					next_token = RED;
+                    forward_token = 1;
+                    break;
+                case BLACK:
+                    // Non-Termination: Token must be recirculated
+                    if (comm_rank == 0)
+                        next_token = WHITE;
+                    else {
+                        my_color = WHITE;
+                        next_token = BLACK;
+                    }
+                    forward_token = 1;
+                    break;
+                case RED:
+                    // Termination: Set our state to RED and circulate term message
+                    my_color = RED;
+                    next_token = RED;
 
-					if (comm_rank == comm_size - 1)
-						forward_token = 0;
-					else
-						forward_token = 1;
-					break;
-			}
+                    if (comm_rank == comm_size - 1)
+                        forward_token = 0;
+                    else
+                        forward_token = 1;
+                    break;
+            }
 
-			/* Forward the token to the next node in the ring */
-			if (forward_token) {
-				td_token.color = next_token;
+            /* Forward the token to the next node in the ring */
+            if (forward_token) {
+                td_token.color = next_token;
 
-				/* Update token counters */
-				if (comm_rank == 0) {
-					if (td_token.color == PINK) {
-						td_token.send_count = ctrl_sent;
-						td_token.recv_count = ctrl_recvd;
-					} else {
-						td_token.send_count = chunks_sent;
-						td_token.recv_count = chunks_recvd;
-					}
-				} else {
-					if (td_token.color == PINK) {
-						td_token.send_count += ctrl_sent;
-						td_token.recv_count += ctrl_recvd;
-					} else {
-						td_token.send_count += chunks_sent;
-						td_token.recv_count += chunks_recvd;
-					}
-				}
+                /* Update token counters */
+                if (comm_rank == 0) {
+                    if (td_token.color == PINK) {
+                        td_token.send_count = ctrl_sent;
+                        td_token.recv_count = ctrl_recvd;
+                    } else {
+                        td_token.send_count = chunks_sent;
+                        td_token.recv_count = chunks_recvd;
+                    }
+                } else {
+                    if (td_token.color == PINK) {
+                        td_token.send_count += ctrl_sent;
+                        td_token.recv_count += ctrl_recvd;
+                    } else {
+                        td_token.send_count += chunks_sent;
+                        td_token.recv_count += chunks_recvd;
+                    }
+                }
 
-				DEBUG(DBG_TOKEN, printf("ensureLocalWork(): Thread %d forwarding %s token\n", comm_rank, color_names[td_token.color]));
-				MPI_Send(&td_token, sizeof(td_token_t), MPI_BYTE, (comm_rank+1)%comm_size,
-					MPIWS_TDTOKEN, MPI_COMM_WORLD);
+                DEBUG(DBG_TOKEN, printf("ensureLocalWork(): Thread %d forwarding %s token\n", comm_rank, color_names[td_token.color]));
+                MPI_Send(&td_token, sizeof(td_token_t), MPI_BYTE, (comm_rank+1)%comm_size,
+                    MPIWS_TDTOKEN, MPI_COMM_WORLD);
 
-				if (my_color != RED) {
-					/* re-Post termination detection listener */
-					int j = (comm_rank == 0) ? comm_size - 1 : comm_rank - 1; // Receive the token from the processor to your left
-					MPI_Irecv(&td_token, sizeof(td_token_t), MPI_BYTE, j, MPIWS_TDTOKEN, MPI_COMM_WORLD, &td_request);
-				}
-			}
+                if (my_color != RED) {
+                    /* re-Post termination detection listener */
+                    int j = (comm_rank == 0) ? comm_size - 1 : comm_rank - 1; // Receive the token from the processor to your left
+                    MPI_Irecv(&td_token, sizeof(td_token_t), MPI_BYTE, j, MPIWS_TDTOKEN, MPI_COMM_WORLD, &td_request);
+                }
+            }
 
-			if (my_color == RED) {
-				// Clean up outstanding requests.
-				// This is safe now that the pink token has mopped up all outstanding messages.
-				MPI_Cancel(&wrin_request);
-				if (iw_request != MPI_REQUEST_NULL)
-					MPI_Cancel(&iw_request);
-				// Terminate
-				return -1;
-			}
-		}
+            if (my_color == RED) {
+                // Clean up outstanding requests.
+                // This is safe now that the pink token has mopped up all outstanding messages.
+                MPI_Cancel(&wrin_request);
+                if (iw_request != MPI_REQUEST_NULL)
+                    MPI_Cancel(&iw_request);
+                // Terminate
+                return -1;
+            }
+        }
 
 
-	}
+    }
 
-	return 0;  // Local work exists
+    return 0;  // Local work exists
 }
 
 int ss_start(int work_size, int chunk_size)
 {
-	int j;
-	StealStack* s = &stealStack;
+    int j;
+    StealStack* s = &stealStack;
 
-	s->work_size  = work_size;
-	s->chunk_size = chunk_size;
+    s->work_size  = work_size;
+    s->chunk_size = chunk_size;
 
-	// Start searching for work at the next thread to our right
-	wrout_request = MPI_REQUEST_NULL;
-	//wrout_buff    = chunk_size;
-	last_steal    = comm_rank;
-	iw_request    = MPI_REQUEST_NULL;
-	chunks_sent   = 0;
-	chunks_recvd  = 0;
-	ctrl_sent     = 0;
-	ctrl_recvd    = 0;
+    // Start searching for work at the next thread to our right
+    wrout_request = MPI_REQUEST_NULL;
+    //wrout_buff    = chunk_size;
+    last_steal    = comm_rank;
+    iw_request    = MPI_REQUEST_NULL;
+    chunks_sent   = 0;
+    chunks_recvd  = 0;
+    ctrl_sent     = 0;
+    ctrl_recvd    = 0;
 
-	printf("Buff size: %d\n", chunk_size * work_size * WORKBUF_SIZE);
-	iwbuff = calloc(chunk_size * work_size * WORKBUF_SIZE, sizeof(char));
-	owbuff = calloc(chunk_size * work_size * WORKBUF_SIZE, sizeof(char));
+    printf("Buff size: %d\n", chunk_size * work_size * WORKBUF_SIZE);
+    iwbuff = (char*) calloc(chunk_size * work_size * WORKBUF_SIZE, sizeof(char));
+    owbuff = (char*) calloc(chunk_size * work_size * WORKBUF_SIZE, sizeof(char));
 
-	// Using adaptive polling interval?
-	if (polling_interval == 0) {
-		pollint_isadaptive = 1;
+    // Using adaptive polling interval?
+    if (polling_interval == 0) {
+        pollint_isadaptive = 1;
         polling_interval   = 1;
     }
 
-	// Termination detection
-	my_color       = WHITE;
-	td_token.color = BLACK;
-	//printf("%d, %d", sizeof(char), sizeof(int));
+    // Termination detection
+    my_color       = WHITE;
+    td_token.color = BLACK;
+    //printf("%d, %d", sizeof(char), sizeof(int));
 
-	// Setup non-blocking recieve for recieving shared work requests
-	MPI_Irecv(wrin_buff, 2*comm_size, MPI_DOUBLE, MPI_ANY_SOURCE, MPIWS_WORKREQUEST, MPI_COMM_WORLD, &wrin_request);
+    // Setup non-blocking recieve for recieving shared work requests
+    MPI_Irecv(wrin_buff, 2*comm_size, MPI_DOUBLE, MPI_ANY_SOURCE, MPIWS_WORKREQUEST, MPI_COMM_WORLD, &wrin_request);
 
-	/* Set up the termination detection receives */
-	if (comm_rank == 0) {
-		// Thread 0 initially has a black token
-		td_request = MPI_REQUEST_NULL;
-	} else {
-		/* Post termination detection listener */
-		j = (comm_rank == 0) ? comm_size - 1 : comm_rank - 1; // Receive the token from the processor to your left
+    /* Set up the termination detection receives */
+    if (comm_rank == 0) {
+        // Thread 0 initially has a black token
+        td_request = MPI_REQUEST_NULL;
+    } else {
+        /* Post termination detection listener */
+        j = (comm_rank == 0) ? comm_size - 1 : comm_rank - 1; // Receive the token from the processor to your left
 
-		MPI_Irecv(&td_token, sizeof(td_token_t), MPI_BYTE, j, MPIWS_TDTOKEN, MPI_COMM_WORLD, &td_request);
-	}
+        MPI_Irecv(&td_token, sizeof(td_token_t), MPI_BYTE, j, MPIWS_TDTOKEN, MPI_COMM_WORLD, &td_request);
+    }
 
-	return 1;
+    return 1;
 }
 
 void ss_finalize()
 {
-	free(wrin_buff);
-	free(wrout_buff);
-	MPI_Finalize();
+    free(wrin_buff);
+    free(wrout_buff);
+    MPI_Finalize();
 }
 
 
 /* initialize the stack */
 StealStack* ss_init(int *argc, char ***argv)
 {
-	StealStack* s = &stealStack;
+    StealStack* s = &stealStack;
 
-	MPI_Init(argc, argv);
+    MPI_Init(argc, argv);
 
-	MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
-	MPI_Comm_rank(MPI_COMM_WORLD, &comm_rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
+    MPI_Comm_rank(MPI_COMM_WORLD, &comm_rank);
 
         s->globalWork = 0;
         s->localWork  = 0;
 
-	s->nNodes     = 0;
+    s->nNodes     = 0;
         s->nLeaves    = 0;
-	s->nAcquire   = 0;
-	s->nRelease   = 0;
-	s->nSteal     = 0;
-	s->nFail      = 0;
-	s->nCreate      = 0;
+    s->nAcquire   = 0;
+    s->nRelease   = 0;
+    s->nSteal     = 0;
+    s->nFail      = 0;
+    s->nCreate      = 0;
 
         s->maxStackDepth = 0;
         s->maxTreeDepth  = 0;
 
-	localQueue = deq_create();
-	mkEmpty(s);
+    localQueue = deq_create();
+    mkEmpty(s);
 
-	// Set a default polling interval
-	polling_interval = pollint_default;
+    // Set a default polling interval
+    polling_interval = pollint_default;
 
-	//allocate buffer of same sizes
-	wrin_buff  = allocate_gossip_memory(comm_size, &buff_size);
-	wrout_buff = allocate_gossip_memory(comm_size, &buff_size);
+    //allocate buffer of same sizes
+    wrin_buff  = allocate_gossip_memory(comm_size, &buff_size);
+    wrout_buff = allocate_gossip_memory(comm_size, &buff_size);
 
-	vsinit(comm_rank,comm_size);
-	return s;
+    vsinit(comm_rank,comm_size);
+    return s;
 }
 
 #else
@@ -574,10 +574,10 @@ void ws_make_progress(StealStack *s)
 		}
 
 		if (pollint_isadaptive && s->localWork != 0)
-			polling_interval = max(pollint_min, POLLINT_SHRINK);
+			polling_interval = std::max(pollint_min, POLLINT_SHRINK);
 	} else {
 		if (pollint_isadaptive && s->localWork != 0)
-			polling_interval = min(pollint_max, POLLINT_GROW);
+			polling_interval = std::min(pollint_max, POLLINT_GROW);
 	}
 
 	return;
@@ -913,7 +913,7 @@ void ss_put_work(StealStack *s, void* node_c)
 
 	/* If the stack is empty, push an empty StealStackNode. */
 	if (deq_isEmpty(localQueue)) {
-		n = malloc(sizeof(StealStackNode));
+		n = (StealStackNode*) malloc(sizeof(StealStackNode));
 		work = malloc(s->chunk_size*s->work_size);
 		if (!n || !work) ss_error("ss_put_work(): Out of virtual memory", 3);
 		n->work = work;
@@ -921,11 +921,11 @@ void ss_put_work(StealStack *s, void* node_c)
 		deq_pushFront(localQueue, n);
 	}
 
-	n = deq_peekFront(localQueue);
+	n = (StealStackNode*) deq_peekFront(localQueue);
 
 	/* If the current StealStackNode is full, push a new one. */
 	if (n->head == s->chunk_size) {
-		n = malloc(sizeof(StealStackNode));
+		n = (StealStackNode*) malloc(sizeof(StealStackNode));
 		work = malloc(s->chunk_size*s->work_size);
 		if (!n || !work) ss_error("ss_put_work(): Out of virtual memory", 3);
 		n->head = 0;
@@ -940,7 +940,7 @@ void ss_put_work(StealStack *s, void* node_c)
 
 	n->head++;
 	s->localWork++;
-	s->maxStackDepth = max(s->localWork, s->maxStackDepth);
+	s->maxStackDepth = std::max(s->localWork, s->maxStackDepth);
 	
 	/* If there is sufficient local work, release a chunk to the global queue */
 	if (s->nNodes % polling_interval == 0) {
@@ -980,7 +980,7 @@ int ss_get_work(StealStack *s, void* node_c)
 
 	/* ensureLocalWork() ensures that the local work queue is not empty,
 	 * so at this point we know there must be work available */
-	n = deq_peekFront(localQueue);
+	n = (StealStackNode*) deq_peekFront(localQueue);
 
 	/* head always points at the next free entry in the work array */
 	n->head--;

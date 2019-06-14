@@ -16,10 +16,8 @@
 #ifndef _UTS_H
 #define _UTS_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 
+#include <algorithm>
 #include "rng/rng.h"
 
 #define UTS_VERSION "2.1"
@@ -68,8 +66,8 @@ typedef enum uts_trees_e    tree_t;
 typedef enum uts_geoshape_e geoshape_t;
 
 /* Strings for the above enums */
-extern char * uts_trees_str[];
-extern char * uts_geoshapes_str[];
+extern const char * uts_trees_str[];
+extern const char * uts_geoshapes_str[];
 
 
 /* Tree  parameters */
@@ -91,8 +89,8 @@ extern int    verbose;
 typedef unsigned long long counter_t;
 
 /* Utility Functions */
-#define max(a,b) (((a) > (b)) ? (a) : (b))
-#define min(a,b) (((a) < (b)) ? (a) : (b))
+//#define max(a,b) (((a) > (b)) ? (a) : (b))
+//#define min(a,b) (((a) < (b)) ? (a) : (b))
 
 void   uts_error(char *str);
 void   uts_parseParams(int argc, char **argv);
@@ -119,9 +117,5 @@ int    impl_parseParam(char *param, char *value);
 void   impl_helpMessage();
 void   impl_abort(int err);
 
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* _UTS_H */
