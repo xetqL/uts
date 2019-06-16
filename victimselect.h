@@ -147,6 +147,30 @@ inline int selectvictim(int rank, int size, int last)
 	return last;
 }
 
+#elif defined(__LOAD_MAP_WS__)
+
+inline void vsinit(int rank, int size)
+{
+	srand(rank);
+}
+
+inline char * vsdescript(void)
+{
+#if defined(__SS_HALF__)
+	return "MPI Workstealing (Half Rand)";
+#else
+	return "MPI Workstealing (Rand)";
+#endif
+}
+
+inline int selectvictim(int rank, int size, int last)
+{
+	do {
+		last = rand()%size;
+	} while(last == rank);
+	return last;
+}
+
 #elif defined(__GUIDED_WS__)
 
 #include <mpi.h>

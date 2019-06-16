@@ -527,11 +527,15 @@ StealStack* ss_init(int *argc, char ***argv)
     vsinit(comm_rank,comm_size);
     return s;
 }
-
 #else
+
+#include "gossip.hh"
+
 static long        wrin_buff;       // Buffer for accepting incoming work requests
 static long        wrout_buff;      // Buffer to send outgoing work requests
+
 /** Make progress on any outstanding WORKREQUESTs or WORKRESPONSEs */
+
 void ws_make_progress(StealStack *s)
 {
 	MPI_Status  status;
@@ -596,6 +600,8 @@ int ensureLocalWork(StealStack *s)
 	if (s->localWork < 0)
 		ss_error("ensureLocalWork(): localWork count is less than 0!", 2);
 
+    auto gossip_db = GossipDatabase<int>::get_instance(comm_size, 1, 9876, 0.0, MPI_COMM_WORLD);
+    gossip_db->execute(comm_rank, s->globalWork);
 	/* If no more work */
 	while (s->localWork == 0) {
 		if (comm_size == 1) return -1;
@@ -804,7 +810,7 @@ int ss_start(int work_size, int chunk_size)
 {
 	int j;
 	StealStack* s = &stealStack;
-
+    //GossipDatabase<double>::register_datatype();
 	s->work_size = work_size;
 	s->chunk_size = chunk_size;
 
@@ -818,8 +824,8 @@ int ss_start(int work_size, int chunk_size)
 	ctrl_sent     = 0;
 	ctrl_recvd    = 0;
 
-	iwbuff = calloc(chunk_size*work_size*WORKBUF_SIZE,sizeof(char));
-	owbuff = calloc(chunk_size*work_size*WORKBUF_SIZE,sizeof(char));
+	iwbuff = (char*) calloc(chunk_size*work_size*WORKBUF_SIZE,sizeof(char));
+	owbuff = (char*) calloc(chunk_size*work_size*WORKBUF_SIZE,sizeof(char));
 
 	// Using adaptive polling interval?
 	if (polling_interval == 0) {
@@ -848,12 +854,12 @@ int ss_start(int work_size, int chunk_size)
 
 	return 1;
 }
+
 void ss_finalize()
 {
 
 	MPI_Finalize();
 }
-
 
 /* initialize the stack */
 StealStack* ss_init(int *argc, char ***argv)
