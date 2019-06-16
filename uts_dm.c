@@ -189,6 +189,8 @@ void parTreeSearch(StealStack *ss) {
       throughput_node.add(children);
       ss->throughput = throughput_node.mean();
 
+
+
       printf("Thread %3d: throughput %d with mean within a 50 pop/push window of %f \n", ss_get_thread_num(), (children), ss->throughput);
     
 #if DEBUG_PROGRESS > 0

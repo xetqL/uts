@@ -968,6 +968,7 @@ int ss_get_work(StealStack *s, void* node_c)
 
 	/* Call ensureLocalWork() to make sure there is work on our local queue.
 	 * If the local queue is empty, this will get work from the global queue */
+
 	if (ensureLocalWork(s) == -1) {
 		DEBUG(DBG_GEN, printf("StealStack::pop - stack is empty and no work can be found\n");fflush(NULL););
 		ss_setState(s, SS_IDLE);
@@ -975,6 +976,9 @@ int ss_get_work(StealStack *s, void* node_c)
 		return STATUS_TERM;
 	}
 
+
+
+    // MPI_Cancel
 	/* We have work */
 	ss_setState(s, SS_WORK);
 

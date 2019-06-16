@@ -151,21 +151,13 @@ inline int selectvictim(int rank, int size, int last)
 
 #include <mpi.h>
 #include <float.h>
+
 typedef double  GossipRawType;
 typedef double* GossipRawTypePtr;
-int MPIWS_GOSSIP_SHARE = 121231234;
-
-int *victims;    // Size == worldsize
-
-/*
-double *victimsWir;
-double *victimsAge;
-
-double *new_victimsWir;
-double *new_victimsAge;
-*/
 
 GossipRawTypePtr victimsData;
+int MPIWS_GOSSIP_SHARE = 121231234;
+int *victims;    // Size == worldsize
 
 inline double* allocate_gossip_memory(int comm_size, int *buff_size) {
     *buff_size = 2 * comm_size * sizeof(GossipRawType);
@@ -176,36 +168,18 @@ inline double get_victim_age(int rank) { return victimsData[2*rank+1]; }
 inline double get_victim_wir(int rank) { return victimsData[2*rank];   }
 inline void   set_victim_age(int rank, GossipRawType age) { victimsData[2*rank+1] = age; }
 inline void   set_victim_wir(int rank, GossipRawType wir) { victimsData[2*rank]   = wir; }
-
-inline double get_timestamp() {
-    /*struct timeval  tv;
-    gettimeofday(&tv, NULL);
-
-    double time_in_mill =
-             (tv.tv_sec) * 1000 + (tv.tv_usec) / 1000 ;
-    return time_in_mill;//MPI_Wtime();*/
-    return MPI_Wtime();
-}
+inline double get_timestamp() { return MPI_Wtime(); }
 
 inline void vsinit(int rank, int comm_size) {
     srand(rank);
     int i,j;
+
     // allocate & init the victim array
-    victims    = (int*) malloc((comm_size -1) * sizeof(int));
-    //weights = malloc((comm_size -1) * sizeof(double));
-    //victimsWir = calloc((comm_size)    , sizeof(double));
-    //victimsAge = malloc((comm_size)    * sizeof(double));
-
-    //new_victimsWir = malloc(comm_size * sizeof(double));
-    //new_victimsAge = malloc(comm_size * sizeof(double));
-
+    victims     = (int*) malloc((comm_size -1) * sizeof(int));
     victimsData = (double*) malloc(2 * comm_size * sizeof(GossipRawType)); //first is wir, then age
-    //new_victimsData = malloc(2 * comm_size * sizeof(double));
 
-    for(i = 0, j = 0; i < comm_size; i++){
-        if(i != rank) {
-            victims[j++] = i;
-        }
+    for(i = 0, j = 0; i < comm_size; i++) {
+        if(i != rank) { victims[j++] = i; }
         set_victim_age(i, -1.0);
         set_victim_wir(i,  0.0);
     }
@@ -225,6 +199,7 @@ inline char* vsdescript(void)
     return "MPI Workstealing (Gossip Selection Candidate)";
 #endif
 }
+
 int seed_knowledge = 0;
 
 #include <sys/time.h>
@@ -232,37 +207,17 @@ int seed_knowledge = 0;
 inline void gossip_merge_unpack(GossipRawTypePtr rcv_buff, int comm_size, int rank, int from)
 {
     int i, position = 0;
-
-    //receiving buffer
-
-    //unpack buffer
-    //MPI_Unpack(buffer, FSIZE, &position, new_victimsWir, comm_size, MPI_DOUBLE, MPI_COMM_WORLD);
-    //MPI_Unpack(buffer, FSIZE, &position, new_victimsAge, comm_size, MPI_DOUBLE,    MPI_COMM_WORLD);
-
     //merge with existing data
     for(i = 0; i < comm_size; ++i) {
-        //if(rank == 0)
-        //    printf("dbg from rank %d; %d, %f; %f\n", rank, i, rcv_buff[2*i+1], get_victim_age(i));
-        if(rcv_buff[2*i+1] > get_victim_age(i)){ // then replace data
-            //if(rank == 0)
-            //printf("Replace\n");
-
+        if(rcv_buff[2*i+1] > get_victim_age(i)) { // then replace data
             set_victim_wir(i, rcv_buff[2*i]);
             set_victim_age(i, rcv_buff[2*i+1]);
         }
     }
-
-    if(get_victim_wir(0) == 18092013.0 && !seed_knowledge) {
-        seed_knowledge = 1;
-        struct timeval  tv;
-        gettimeofday(&tv, NULL);
-        double time_in_mill = (tv.tv_sec) * 1000 + (tv.tv_usec) / 1000;
-        printf("rank %d knows the seed %f gossip data at %f from %d\n", rank, get_victim_wir(0), get_timestamp(), from);
-    }
 }
 
 inline void gossip_pack(GossipRawTypePtr buffer, int comm_size){
-    const int FSIZE = 2* comm_size * sizeof(GossipRawType) ;
+    const int FSIZE = 2 * comm_size * sizeof(GossipRawType) ;
     memcpy(buffer, victimsData, FSIZE);
 }
 
