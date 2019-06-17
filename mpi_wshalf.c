@@ -599,10 +599,7 @@ int ensureLocalWork(StealStack *s)
 
 	if (s->localWork < 0)
 		ss_error("ensureLocalWork(): localWork count is less than 0!", 2);
-#if defined(__LOAD_MAP_WS__)
-    //auto gossip_db = GossipDatabase<int>::get_instance(comm_size, 1, 9876, 100000000000.0, MPI_COMM_WORLD);
-    //gossip_db->execute(comm_rank, s->globalWork);
-#endif
+
     /* If no more work */
 	while (s->localWork == 0) {
 		if (comm_size == 1) return -1;

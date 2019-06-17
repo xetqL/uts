@@ -161,7 +161,7 @@ void uts_initRoot(Node * root, int type) {
 
 int uts_numChildren_bin(Node * parent) {
   // distribution is identical everywhere below root
-  int    v = rng_rand(parent->state.state);	
+  int    v = rng_rand(parent->state.state);
   double d = rng_toProb(v);
 
   return (d < nonLeafProb) ? nonLeafBF : 0;

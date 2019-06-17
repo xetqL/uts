@@ -107,10 +107,11 @@ uts-mpi-ws-half: $(DM_SRCS) $(QUEUE_SRCS) mpi_wshalf.c $(RNG_SRC) $(COMMON_SRCS)
 	$(MPICC) $(MPICC_OPTS) $(MPILD_OPTS) $(RNG_DEF) $(FLAGS) -DTRACE -D__VS_ORIG__ -D__SS_HALF__ -D__MPI__ -o $@ $+
 
 uts-mpi-ws-half-rand: $(DM_SRCS) $(QUEUE_SRCS) mpi_wshalf.c $(RNG_SRC) $(COMMON_SRCS)
-	$(MPICC) $(MPICC_OPTS) $(MPILD_OPTS) $(RNG_DEF) $(FLAGS) -D__VS_RAND__ -D__SS_HALF__ -D__MPI__ -o $@ $+
+	$(MPICC) -g $(MPICC_OPTS) $(MPILD_OPTS) $(RNG_DEF) $(FLAGS) -D__VS_RAND__ -D__SS_HALF__ -D__MPI__ -o $@ $+
 
 uts-mpi-loadws-half-rand: $(DM_SRCS) $(QUEUE_SRCS) mpi_wshalf.c $(RNG_SRC) $(COMMON_SRCS)
-	$(MPICC) $(MPICC_OPTS) $(MPILD_OPTS) $(RNG_DEF) $(FLAGS) -D__LOAD_MAP_WS__ -D__SS_HALF__ -D__MPI__ -o $@ $+
+	#/home/xetql/SimGrid-3.22/bin/smpicxx -std=c++14 $(MPICC_OPTS) $(MPILD_OPTS) $(RNG_DEF) $(FLAGS) -D__LOAD_MAP_WS__ -D__SS_HALF__ -D__MPI__ -o $@ $+
+	mpic++ -std=c++14 $(MPICC_OPTS) $(MPILD_OPTS) $(RNG_DEF) $(FLAGS) -D__LOAD_MAP_WS__ -D__SS_HALF__ -D__MPI__ -o $@ $+
 
 uts-mpi-guidedws-half-rand: $(DM_SRCS) $(QUEUE_SRCS) mpi_wshalf.c window.hh $(RNG_SRC) $(COMMON_SRCS)
 	$(MPICC) $(MPICC_OPTS) $(MPILD_OPTS) $(RNG_DEF) $(FLAGS) -D__GUIDED_WS__ -D__SS_HALF__ -D__MPI__ -o $@ $+

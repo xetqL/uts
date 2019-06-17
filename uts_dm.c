@@ -159,7 +159,8 @@ void genChildren(Node * parent, void * child_buf, Node * child, StealStack * ss,
 
 #include "window.hh"
 SlidingWindow<double> throughput_node(50);
-
+#include "gossip.hh"
+#include <iostream>
 void parTreeSearch(StealStack *ss) {
   Node *parent;
   Node *child;
@@ -176,22 +177,29 @@ void parTreeSearch(StealStack *ss) {
   parent_buf = parent;
   child_buf  = child;
 #endif
-
+#if defined(__LOAD_MAP_WS__)
+  int comm_rank, comm_size;
+  MPI_Comm_rank(MPI_COMM_WORLD, &comm_rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
+  auto gossip_db = GossipDatabase<int>::get_instance(comm_size, 1, 9876, 0.0025, MPI_COMM_WORLD);
+#endif
   int i = 1;
   ss->throughput = 0.0;
+
   while (ss_get_work(ss, parent_buf) == STATUS_HAVEWORK) {
       int children;
-
+#if defined(__LOAD_MAP_WS__)
+      gossip_db->execute(comm_rank, ss->globalWork);
+#endif
       genChildren(parent, child_buf, child, ss, &children);
+
 
       children--;
 
       throughput_node.add(children);
       ss->throughput = throughput_node.mean();
 
-
-
-      // printf("Thread %3d: throughput %d with mean within a 50 pop/push window of %f \n", ss_get_thread_num(), (children), ss->throughput);
+      //printf("Thread %3d: throughput %d with mean within a 50 pop/push window of %f \n",ss_get_thread_num(),(children),ss->throughput);
     
 #if DEBUG_PROGRESS > 0
       // Debugging: Witness progress...
